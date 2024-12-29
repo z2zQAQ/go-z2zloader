@@ -145,8 +145,6 @@ github.com/gonutz/ide/w32
 
 # 学习资料
 
-[Junk-Go-Generator/Junk Code Generation.go at master · SaturnsVoid/Junk-Go-Generator](https://github.com/SaturnsVoid/Junk-Go-Generator/blob/master/Junk Code Generation.go)
-
 [go实现免杀(实用思路篇) | CN-SEC 中文网](https://cn-sec.com/archives/2839255.html)
 
 [（●´3｀●）好啦好啦](https://shut-td.github.io/CS远控免杀思路与实现/)
