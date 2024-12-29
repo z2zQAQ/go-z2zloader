@@ -124,12 +124,12 @@ func Encode(fp string) {
 	base64Data := base64.StdEncoding.EncodeToString(ciphertext)
 	encodeData := []byte(base64Data)
 	//保存加密后的文件
-	file_output := "output.bin"
+	file_output := "output/encodeshellcode.bin"
 	err = os.WriteFile(file_output, encodeData, 0644)
 	if err != nil {
 		log.Fatalf("保存文件时出错: %v", err)
 	}
-	log.Println("文件已成功保存")
+	log.Println("文件已成功保存，文件保存为output目录下的encodeshellcode.bin")
 }
 
 func Decode(encodeDataByte []byte) []byte {
