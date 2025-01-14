@@ -12,13 +12,11 @@ an Anti- Virus demo using go
 
 aes+base64，使用分离加载不用担心原生文件被杀
 
-## 动态
+## 加载器免杀
 
-直接调用syscal底层函数，挺老的办法没想到还能用
+通过dll调用windows api
 
-线程注入可以用，会被360核晶杀
-
-还尝试了APC注入，但是有时候上不了线
+实现了直接SyscallN执行shellcode，还有线程注入以及earlybirl注入
 
 ## 其他
 
@@ -53,6 +51,12 @@ go build -ldflags="-s -w" -o 输出exe文件名 main.go
 
 
 ## 2.0
+
+main.go不注释行10
+
+执行go build -ldflags="-s -w" -o z2zloader.exe main.go
+
+![image-20250114171705764](README/image-20250114171705764.png)
 
 ![image-20241228172742491](README/image-20241228172742491.png)
 
@@ -160,3 +164,5 @@ easybirl过了核晶，成功上线卡巴
 [免杀技术 - go shellcode 加载 bypassAV | Hyyrent blog](https://pizz33.github.io/posts/4ac17cb886a9/)
 
 https://github.com/HZzz2/go-shellcode-loader
+
+[GitHub - Ne0nd0g/go-shellcode：Windows Shellcode 运行程序和支持实用程序的存储库。应用程序使用各种 API 调用或技术加载和执行 Shellcode。](https://github.com/Ne0nd0g/go-shellcode)

