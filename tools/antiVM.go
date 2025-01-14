@@ -85,7 +85,7 @@ func checkUsernames() (bool, error) {
 	// 黑名单用户名列表
 	blacklist := []string{
 		"CurrentUser", "Sandbox", "Emily", "HAPUBWS", "Hong Lee", "IT-ADMIN", "Johnson",
-		"Miller", "milozs", "Peter Wilson", "timmy", "user", "sand box", "malware",
+		"Miller", "milozs", "P eter Wilson", "timmy", "user", "sand box", "malware",
 		"maltest", "test user", "virus", "John Doe", "Sangfor", "JOHN-PC",
 	}
 

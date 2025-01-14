@@ -4,13 +4,15 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package main
 
 import (
-	"z2zloader/cmd"
+	"z2zloader/tools"
 )
 
 func main() {
-	cmd.Execute()
-	//tools.DirectShellcodeInject("E:\\mygo\\z2zloader\\output.bin")
-	//tools.EaybirlInject("E:\\mygo\\z2zloader\\output.bin")
-	//tools.MappingInject("E:\\mygo\\z2zloader\\output.bin")
+	//tools.OriginalLoader("./output.bin")
+	//cmd.Execute()
+	//tools.ThreadShellcodeInject("./output.bin")
+	//tools.ApcShellcodeInject("./output.bin")
 
+	tools.EarlybirlInject("./output.bin")
+	//tools.MappingInject("E:\\mygo\\z2zloader\\output.bin")
 }
