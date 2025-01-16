@@ -44,3 +44,13 @@ func main(){
 
 	return nil
 }
+
+//func NoCmd() error {
+//	adad := syscall.NewLazyDLL("kernel32.dll").NewProc("GetConsoleWindow")
+//	hwnd, _, _ := adad.Call()
+//	if hwnd != 0 {
+//		showWindowAsync := syscall.NewLazyDLL("user32.dll").NewProc("ShowWindowAsync")
+//		showWindowAsync.Call(hwnd, 0)
+//	}
+//	return nil
+//}

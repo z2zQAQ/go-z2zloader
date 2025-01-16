@@ -13,7 +13,7 @@ import (
 // localCmd represents the local command
 var localCmd = &cobra.Command{
 	Use:   "local",
-	Short: "本地加载shellcode",
+	Short: "本地加载shellcode，生成较小的shellcodeloader",
 	Long: `执行本地加密过的aes-shellcode   For example:
 .\z2zloader local -f file_path -m 1`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -33,7 +33,7 @@ var localCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(localCmd)
-	localCmd.Flags().StringP("file", "f", "", "加载本地shellcode文件,请用类似\"E:\\test\\shellcode\\output.bin\"的格式插入")
+	localCmd.Flags().StringP("file", "f", "output.bin", "加载本地shellcode文件,默认名称为output.bin(只是指定生成后的exe调用的bin文件名)")
 	localCmd.Flags().IntP("module", "m", 1, "选择shellcode加载方式,1为SyscallN执行,2为线程注入,3为earybirl注入，推荐使用3")
 	localCmd.MarkFlagRequired("file")
 	localCmd.Flags().StringP("output", "o", "z2z.exe", "输出文件的名字")

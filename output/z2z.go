@@ -4,6 +4,6 @@ import (
     "z2zloader/tools"
 )
 func main(){
-	tools.Local_loader("E:\\mygo\\shellcode_loader\\output.bin",3)
+	tools.Local_loader("output.bin",3)
 }
 

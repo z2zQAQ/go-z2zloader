@@ -60,13 +60,18 @@ main.go不注释行10
 
 ![image-20241228172742491](README/image-20241228172742491.png)
 
-分为encode local remote模块 
+分为encode local remote local_exec模块
+
+```
+local根据生成一个exe加载器，把shellcode和exe放在同目录下运行，需要go环境，生成的加载器小
+local_exec是直接调用加载器，-f指定shellcode路径即可
+```
 
 比较重要的是local模块
 
 ![image-20241228172817493](README/image-20241228172817493.png)
 
-必要参数为f
+必要参数为f（建议放在同一目录直接输入文件名）
 
 ![image-20241228172934257](README/image-20241228172934257.png)
 
